@@ -47,4 +47,5 @@ dependencies {
     annotationProcessor 'com.github.bumptech.glide:compiler:4.7.1'
     implementation "com.github.vicpinm:krealmextensions:2.2.0"
     implementation 'com.miguelcatalan:materialsearchview:1.4.0'
+    implementation 'io.michaelrocks:libphonenumber-android:8.9.0'
 }

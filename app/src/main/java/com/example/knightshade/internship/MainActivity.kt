@@ -25,8 +25,12 @@ import com.github.tamir7.contacts.Contacts
 import com.github.tamir7.contacts.PhoneNumber
 import com.miguelcatalan.materialsearchview.MaterialSearchView
 import com.vicpin.krealmextensions.delete
+import com.vicpin.krealmextensions.query
 import com.vicpin.krealmextensions.queryAll
 import com.vicpin.krealmextensions.save
+import io.michaelrocks.libphonenumber.android.NumberParseException
+import io.michaelrocks.libphonenumber.android.PhoneNumberUtil
+import io.michaelrocks.libphonenumber.android.Phonenumber
 import io.realm.Realm
 import io.realm.RealmObject
 import kotlinx.android.synthetic.main.activity_main.*
@@ -109,14 +113,38 @@ class MainActivity : AppCompatActivity() {
         val contacts = arrayListOf<ContactModel>()
 
         contact.forEach { c ->
-            contacts.add(ContactModel(
-                    c.displayName,
-                    getPhoneNumber(c.phoneNumbers),
-                    c.photoUri
-            ))
+            if (isMobileNumber(getPhoneNumber(c.phoneNumbers))) {
+                contacts.add(ContactModel(
+                        c.displayName,
+                        getPhoneNumber(c.phoneNumbers),
+                        c.photoUri
+                ))
+            } else {
+                Log.d(this.javaClass.simpleName, "Landline number ${getPhoneNumber(c.phoneNumbers)}")
+            }
         }
 
         return contacts
+
+    }
+
+    // Return true when given number is a mobile number
+    private fun isMobileNumber(phNumber: String): Boolean {
+        val phoneNumberUtil: PhoneNumberUtil = PhoneNumberUtil.createInstance(this)
+        var phoneNumber: Phonenumber.PhoneNumber? = null
+
+        try {
+            phoneNumber = phoneNumberUtil.parse(phNumber, "IN")
+        } catch (e: NumberParseException) {
+            Log.d(this.javaClass.simpleName, e.toString())
+        }
+
+        if (phoneNumber == null){
+            return false
+        } else {
+            val isMobile = phoneNumberUtil.getNumberType(phoneNumber)
+            return PhoneNumberUtil.PhoneNumberType.MOBILE == isMobile
+        }
 
     }
 
@@ -211,13 +239,21 @@ private class ContactAdapter( private val contacts: List<ContactModel>): Recycle
         holder.parentLayout.setOnClickListener {
 
             if (!holder.selected) {
-                holder.tickIcon.visibility = View.VISIBLE
-                contact.save()
+                val members = ContactModel().query { equalTo("name", contact.name) }
+                if( members.isNotEmpty()) {
+                    context.toast("Already selected")
+                } else {
+                    holder.tickIcon.visibility = View.VISIBLE
+                    contact.save()
+                    holder.selected = !holder.selected
+                }
+
             } else {
                 holder.tickIcon.visibility = View.INVISIBLE
                 ContactModel().delete { equalTo("name", contact.name) }
+                holder.selected = !holder.selected
             }
-            holder.selected = !holder.selected
+
 
         }
     }
