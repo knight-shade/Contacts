@@ -12,7 +12,9 @@ import android.support.v4.content.ContextCompat
 import android.support.v7.widget.CardView
 import android.support.v7.widget.LinearLayoutManager
 import android.support.v7.widget.RecyclerView
+import android.util.Log
 import android.view.LayoutInflater
+import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -21,19 +23,23 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import com.github.tamir7.contacts.Contacts
 import com.github.tamir7.contacts.PhoneNumber
+import com.miguelcatalan.materialsearchview.MaterialSearchView
 import com.vicpin.krealmextensions.delete
 import com.vicpin.krealmextensions.queryAll
 import com.vicpin.krealmextensions.save
 import io.realm.Realm
 import io.realm.RealmObject
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.android.synthetic.main.toolbar_layout.*
+import kotlinx.coroutines.experimental.selects.select
 import org.jetbrains.anko.startActivity
 import org.jetbrains.anko.toast
 
 class MainActivity : AppCompatActivity() {
 
-    private final val MY_PERMISSION_READ_CONTACT = 1
+    private val MY_PERMISSION_READ_CONTACT = 1
+
+    // Used by Material Search Bar
+    lateinit var fullList: List<ContactModel>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,24 +47,63 @@ class MainActivity : AppCompatActivity() {
         Contacts.initialize(this)
         Realm.init(this)
 
+        // Checking whether activity is started to add members explicitly
+        // when database already container members .
+        if (intent.getBooleanExtra("check", true)) {
+            alreadyHasMembers()
+        }
+
         setContentView(R.layout.activity_main)
-        tv_title.text = "SELECT  CONTACTS"
         setSupportActionBar(toolbar)
 
+        // Getting the permission
         requestPermission()
-        getContact()
-
-        rv_select_contacts.setHasFixedSize(true)
-        rv_select_contacts.layoutManager = LinearLayoutManager(this)
-        rv_select_contacts.adapter = ContactAdapter(getContact(), this)
 
         fab_done.setOnClickListener {
             startActivity<Members>()
             finish()
         }
+
+        // The search bar
+        search_view.setOnQueryTextListener(object: MaterialSearchView.OnQueryTextListener{
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                // Since results are loaded instantly, query submission is not required.
+                return false
+            }
+
+            override fun onQueryTextChange(newText: String): Boolean {
+                val results = fullList.filter {
+                    it.name.startsWith(newText, ignoreCase = true)
+                }
+
+                rv_select_contacts.adapter = ContactAdapter(results)
+                return false
+            }
+        })
     }
 
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.options, menu)
+        val item = menu.findItem(R.id.action_search)
+        search_view.setMenuItem(item);
+        return true
+    }
 
+    // Setups the activity
+    private fun setUp() {
+        fullList = getContact()
+        rv_select_contacts.layoutManager = LinearLayoutManager(this)
+        rv_select_contacts.adapter = ContactAdapter(fullList)
+    }
+
+    private fun alreadyHasMembers() {
+        if (ContactModel().queryAll().isNotEmpty()){
+            startActivity<Members>()
+            finish()
+        }
+    }
+
+    // Getting contacts from content provider
     private fun getContact(): List<ContactModel> {
         val contact = Contacts.getQuery().find()
         val contacts = arrayListOf<ContactModel>()
@@ -75,6 +120,7 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    // PhoneNumber being list and some are randomly empty, this take care of it.
     private fun getPhoneNumber(phoneNumber: List<PhoneNumber>):String {
         phoneNumber.forEach { p ->
             if (p.number.isNotEmpty()){
@@ -94,7 +140,7 @@ class MainActivity : AppCompatActivity() {
                     arrayOf(Manifest.permission.READ_CONTACTS),
                     MY_PERMISSION_READ_CONTACT)
         } else {
-            Snackbar.make(select_contact_activity, "Permission already granted", Snackbar.LENGTH_SHORT).show()
+            setUp()
         }
     }
 
@@ -102,6 +148,7 @@ class MainActivity : AppCompatActivity() {
         when (requestCode) {
             MY_PERMISSION_READ_CONTACT -> {
                 if( (grantResults.isNotEmpty()) && grantResults[0] == PackageManager.PERMISSION_GRANTED){
+                    setUp()
                 } else {
                     requestPermission()
                 }
@@ -114,7 +161,9 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-private class ContactAdapter( private val contacts: List<ContactModel>, private val context: Context): RecyclerView.Adapter<ContactAdapter.ViewHolder>(){
+private class ContactAdapter( private val contacts: List<ContactModel>): RecyclerView.Adapter<ContactAdapter.ViewHolder>(){
+
+    lateinit var context: Context
 
     class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
         val name = view.findViewById<TextView>(R.id.tv_name) as TextView
@@ -128,6 +177,8 @@ private class ContactAdapter( private val contacts: List<ContactModel>, private 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val item = LayoutInflater.from(parent.context)
                 .inflate(R.layout.contact_item, parent, false)
+
+        context = parent.context
 
         return ViewHolder(item)
     }
@@ -143,7 +194,19 @@ private class ContactAdapter( private val contacts: List<ContactModel>, private 
             Glide.with(context).load(contact.photoUri)
                     .apply(RequestOptions.circleCropTransform())
                     .into(holder.profile)
+        } else {
+            Glide.with(context).load(R.drawable.profile)
+                    .apply(RequestOptions.circleCropTransform())
+                    .into(holder.profile)
         }
+
+        if ( contact.photoUri == null){
+            Log.d("PictureUri", "NULL")
+        } else {
+            Log.d("Picture: ", contact.photoUri)
+        }
+
+        holder.tickIcon.visibility = View.INVISIBLE
 
         holder.parentLayout.setOnClickListener {
 

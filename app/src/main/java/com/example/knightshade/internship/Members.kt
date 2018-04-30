@@ -35,24 +35,26 @@ class Members : AppCompatActivity() {
 
         rv_members.setHasFixedSize(true)
         rv_members.layoutManager = LinearLayoutManager(this)
-        rv_members.adapter = MembersAdapter(ContactModel().queryAll(), this)
+        rv_members.adapter = MembersAdapter(ContactModel().queryAll().toMutableList())
 
+        // Add more members
         fab_add.setOnClickListener {
-            startActivity<MainActivity>()
+            startActivity<MainActivity>( "check" to false)
             finish()
         }
     }
 }
 
 
-private class MembersAdapter( private val contacts: List<ContactModel>, private val context: Context): RecyclerView.Adapter<MembersAdapter.ViewHolder>(){
+private class MembersAdapter( private val contacts: MutableList<ContactModel>): RecyclerView.Adapter<MembersAdapter.ViewHolder>(){
+
+    lateinit var context: Context
 
     class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
         val name = view.findViewById<TextView>(R.id.tv_name) as TextView
         val phone = view.findViewById<TextView>(R.id.tv_phone_number) as TextView
         val profile = view.findViewById<ImageView>(R.id.iv_profile) as ImageView
         val parentLayout = view.findViewById<CardView>(R.id.cv_contact_item) as CardView
-        val tickIcon = view.findViewById<ImageView>(R.id.iv_deleted) as ImageView
         var deleted = false
     }
 
@@ -60,6 +62,7 @@ private class MembersAdapter( private val contacts: List<ContactModel>, private 
         val item = LayoutInflater.from(parent.context)
                 .inflate(R.layout.member_item, parent, false)
 
+        context = parent.context
         return ViewHolder(item)
     }
 
@@ -74,13 +77,19 @@ private class MembersAdapter( private val contacts: List<ContactModel>, private 
             Glide.with(context).load(contact.photoUri)
                     .apply(RequestOptions.circleCropTransform())
                     .into(holder.profile)
+        } else {
+            Glide.with(context).load(R.drawable.profile)
+                    .apply(RequestOptions.circleCropTransform())
+                    .into(holder.profile)
         }
 
         holder.parentLayout.setOnClickListener {
 
             if (!holder.deleted) {
-                holder.tickIcon.visibility = View.VISIBLE
                 ContactModel().delete { equalTo("name", contact.name) }
+                contacts.removeAt(position)
+                notifyItemRemoved(position)
+                notifyItemRangeChanged(position, contacts.size)
             } else {
                 context.toast("Already deleted")
             }
